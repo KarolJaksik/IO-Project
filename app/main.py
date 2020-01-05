@@ -184,7 +184,10 @@ class User(db.Model):
 
     @classmethod
     def find_by_email(cls, email):
-        return cls.query.filter_by(email=email).first()
+        user = cls.query.filter_by(email=email).first()
+        if user is None:
+            raise FileNotFoundError
+        return user
 
 
 class UserSchema(ma.Schema):
@@ -314,7 +317,10 @@ def create_user():
 
 @app.route('/api/activate/<email>', methods=['GET'])
 def activate_user(email):
-    user = User.find_by_email(email)
+    try:
+        user = User.find_by_email(email)
+    except FileNotFoundError:
+        return {'message':'No such user'}
     user.is_activated = True
 
     db.session.commit()
@@ -325,7 +331,10 @@ def activate_user(email):
 def login():
     password = request.json['password']
     email = request.json['email']
-    user = User.find_by_email(email)
+    try:
+        user = User.find_by_email(email)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
 
     if not user.is_activated:
         return {'message': 'User not activated'}
@@ -345,7 +354,10 @@ def login():
 @jwt_required
 def get_current_user():
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     return user_details_schema.jsonify(user)
 
 
@@ -353,7 +365,10 @@ def get_current_user():
 @jwt_required
 def update_current_user():
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     user.name = request.json["name"]
     user.email = request.json["email"]
     user.phone_number = request.json["phone"]
@@ -379,7 +394,10 @@ def delete_current_user():
 @jwt_required
 def cancel_delete():
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     user.delete_date = None
 
     return user_details_schema.jsonify(user)
@@ -389,7 +407,10 @@ def cancel_delete():
 @jwt_required
 def get_favorite_ads():
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     favorites = Favorite.query.filter_by(user=user.id)
     ads = []
     for favorite in favorites:
@@ -402,7 +423,10 @@ def get_favorite_ads():
 @jwt_required
 def get_my_ads():
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     my_ads = Advertisement.query.filter_by(owner=user.email)
 
     return advertisements_schema.jsonify(my_ads)
@@ -497,7 +521,10 @@ def promote_advertisement(id):
 def add_ad_to_favorite(id):
     advertisement = Advertisement.query.get(id)
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     new_favorite = Favorite(user.id, id)
 
     db.session.add(new_favorite)
@@ -511,7 +538,10 @@ def add_ad_to_favorite(id):
 def delete_ad_from_favorite(id):
     advertisement = Advertisement.query.get(id)
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     favorite = Favorite.query.filter_by(ad=id, user=user.id).first()
 
     db.session.delete(favorite)
@@ -580,7 +610,10 @@ def get_categories():
 @jwt_required
 def create_conversation():
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     person_b = request.json["id"]
     conversation = Conversation(user.id, person_b)
 
@@ -594,7 +627,10 @@ def create_conversation():
 @jwt_required
 def get_conversations():
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     conversations = Conversation.query.filter((Conversation.person_a == user.id) | (Conversation.person_b == user.id))
 
     return conversations_schema.jsonify(conversations)
@@ -612,7 +648,10 @@ def get_conversation(id):
 @jwt_required
 def create_message(id):
     current = get_jwt_identity()
-    user = User.find_by_email(current)
+    try:
+        user = User.find_by_email(current)
+    except FileNotFoundError:
+        return {'message': 'No such user'}
     conversation = Conversation.query.get(id)
     message_text = request.json["message"]
     direction = True
