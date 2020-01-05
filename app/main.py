@@ -308,10 +308,7 @@ def create_user():
 
     db.session.add(new_user)
     db.session.commit()
-    print("User id")
-    print(new_user.id)
     token = encode_auth_token(new_user.id)
-    print(token)
     send_email(email, token)
     #
     # to_return = user_details_schema.jsonify(new_user)
@@ -366,8 +363,6 @@ def activate_user(token, email):
         return {'message': 'No such user'}
 
     id = decode_auth_token(token)
-    print("token")
-    print(id)
     if id is not user.id:
         return {'message': 'Wrong token'}
 
