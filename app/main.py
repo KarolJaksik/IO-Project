@@ -10,6 +10,7 @@ from functools import wraps
 import os
 import enum
 import datetime
+import jwt
 
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -17,12 +18,13 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'db.sqlite')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = 'jwt-secret-string'
+app.config['SECRET_KEY'] = 'jwt-secret-string'
 app.config['MAIL_SERVER'] = 'mail.cock.li'
 app.config['MAIL_PORT'] = 465
 app.config['MAIL_USE_SSL'] = True
 app.config['MAIL_USERNAME'] = 'ogloszenioofka@nuke.africa'
 app.config['MAIL_PASSWORD'] = 'MyciekTop'
-jwt = JWTManager(app)
+jwtmgr = JWTManager(app)
 db = SQLAlchemy(app)
 ma = Marshmallow(app)
 mail = Mail(app)
@@ -302,12 +304,15 @@ def create_user():
     password = request.json['password']
     new_user = User(name, email, phone, show_phone)
     new_user.hash_password(password)
-    # access_token = create_access_token(identity=email)
     # refresh_token = create_refresh_token(identity=email)
 
     db.session.add(new_user)
     db.session.commit()
-    send_email(email)
+    print("User id")
+    print(new_user.id)
+    token = encode_auth_token(new_user.id)
+    print(token)
+    send_email(email, token)
     #
     # to_return = user_details_schema.jsonify(new_user)
     # to_return['access_token']=access_token
@@ -315,12 +320,57 @@ def create_user():
     return user_details_schema.jsonify(new_user)
 
 
-@app.route('/api/activate/<email>', methods=['GET'])
-def activate_user(email):
+def encode_auth_token(id):
+    """
+    Generates the Auth Token
+    :return: string
+    """
+    try:
+        payload = {
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1),
+            'iat': datetime.datetime.utcnow(),
+            'sub': id,
+        }
+        token = str(jwt.encode(
+            payload,
+            app.config.get('JWT_SECRET_KEY'),
+            algorithm='HS256'
+        ))
+        token = token.replace("'", '')
+        token = token[1:]
+        return token
+    except Exception as e:
+        return e
+
+
+def decode_auth_token(auth_token):
+    """
+    Decodes the auth token
+    :param auth_token:
+    :return: integer|string
+    """
+    try:
+        payload = jwt.decode(auth_token, app.config.get('JWT_SECRET_KEY'))
+        return payload['sub']
+    except jwt.ExpiredSignatureError:
+        return 'Signature expired. Please log in again.'
+    except jwt.InvalidTokenError:
+        return 'Invalid token. Please log in again.'
+
+
+@app.route('/api/activate/<token>/<email>', methods=['GET'])
+def activate_user(token, email):
     try:
         user = User.find_by_email(email)
     except FileNotFoundError:
-        return {'message':'No such user'}
+        return {'message': 'No such user'}
+
+    id = decode_auth_token(token)
+    print("token")
+    print(id)
+    if id is not user.id:
+        return {'message': 'Wrong token'}
+
     user.is_activated = True
 
     db.session.commit()
@@ -729,11 +779,11 @@ def delete_category(id):
     return category_schema.jsonify(category)
 
 
-def send_email(email):
-    msg = Message(subject='Activation', body='localhost:8000/api/activate/{}'.format(email),
+def send_email(email, access_token):
+    msg = Message(subject='Activation', body='localhost:8000/api/activate/{}/{}'.format(access_token,email),
                   sender='ogloszenioofka@nuke.africa', recipients=[email])
     mail.send(msg)
-    return 'Dupa'
+    return 'Email sent!'
 
 
 if __name__ == '__main__':
