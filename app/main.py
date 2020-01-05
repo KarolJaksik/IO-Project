@@ -5,6 +5,7 @@ from passlib.apps import custom_app_context as pwd_context
 from flask_jwt_extended import JWTManager
 from flask_jwt_extended import (create_access_token, create_refresh_token,
                                 jwt_required, jwt_refresh_token_required, get_jwt_identity, get_raw_jwt)
+from flask_mail import Mail, Message
 from functools import wraps
 import os
 import enum
@@ -16,9 +17,15 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'db.sqlite')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = 'jwt-secret-string'
+app.config['MAIL_SERVER'] = 'mail.cock.li'
+app.config['MAIL_PORT'] = 465
+app.config['MAIL_USE_SSL'] = True
+app.config['MAIL_USERNAME'] = 'ogloszenioofka@nuke.africa'
+app.config['MAIL_PASSWORD'] = 'MyciekTop'
 jwt = JWTManager(app)
 db = SQLAlchemy(app)
 ma = Marshmallow(app)
+mail = Mail(app)
 
 
 def require_permissions(access_level):
@@ -236,7 +243,7 @@ conversation_schema = ConversationSchema()
 conversations_schema = ConversationSchema(many=True)
 
 
-class Message(db.Model):
+class ChatMessage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     message_text = db.Column(db.String(500), nullable=False)
     message_date = db.Column(db.DateTime, nullable=False)
@@ -292,17 +299,26 @@ def create_user():
     password = request.json['password']
     new_user = User(name, email, phone, show_phone)
     new_user.hash_password(password)
-
     # access_token = create_access_token(identity=email)
     # refresh_token = create_refresh_token(identity=email)
 
     db.session.add(new_user)
     db.session.commit()
+    send_email(email)
     #
     # to_return = user_details_schema.jsonify(new_user)
     # to_return['access_token']=access_token
     # to_return['refresh_token']=refresh_token
     return user_details_schema.jsonify(new_user)
+
+
+@app.route('/api/activate/<email>', methods=['GET'])
+def activate_user(email):
+    user = User.find_by_email(email)
+    user.is_activated = True
+
+    db.session.commit()
+    return user_details_schema.jsonify(user)
 
 
 @app.route('/api/login', methods=['POST'])
@@ -311,6 +327,8 @@ def login():
     email = request.json['email']
     user = User.find_by_email(email)
 
+    if not user.is_activated:
+        return {'message': 'User not activated'}
     if user.verify_password(password):
         access_token = create_access_token(identity=email)
         refresh_token = create_refresh_token(identity=email)
@@ -585,7 +603,7 @@ def get_conversations():
 @app.route("/api/chat/<id>", methods=["GET"])
 @jwt_required
 def get_conversation(id):
-    messages = Message.query.filter_by(conversation=id)
+    messages = ChatMessage.query.filter_by(conversation=id)
 
     return messages_schema.jsonify(messages)
 
@@ -602,12 +620,12 @@ def create_message(id):
     if user.id is conversation.person_b:
         direction = False
 
-    message = Message(message_text, direction, id)
+    message = ChatMessage(message_text, direction, id)
 
     db.session.add(message)
     db.session.commit()
 
-    messages = Message.query.filter_by(conversation=id)
+    messages = ChatMessage.query.filter_by(conversation=id)
 
     return messages_schema.jsonify(messages)
 
@@ -670,6 +688,13 @@ def delete_category(id):
     db.session.delete(category)
     db.session.commit()
     return category_schema.jsonify(category)
+
+
+def send_email(email):
+    msg = Message(subject='Activation', body='localhost:8000/api/activate/{}'.format(email),
+                  sender='ogloszenioofka@nuke.africa', recipients=[email])
+    mail.send(msg)
+    return 'Dupa'
 
 
 if __name__ == '__main__':
