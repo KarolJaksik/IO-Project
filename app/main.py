@@ -449,7 +449,9 @@ def reset_password():
     except FileNotFoundError:
         return {'message': 'No such user'}
     token = encode_auth_token(user.id)
-    return redirect(os.environ.get('FRONT') + 'reset-password?token=' + token)
+    msg = os.environ.get('FRONT') + 'reset-password?token=' + token
+    send_reset_email(email, msg)
+    return {'message': 'email sent'}
 
 
 password_json_schema = {
@@ -1039,6 +1041,14 @@ def delete_category(id):
 def send_email(email, access_token):
     msg = Message(subject='Activation',
                   body='{}/api/activate/{}/{}'.format(os.environ.get('LINK'), access_token, email),
+                  sender=os.environ.get('MAIL_USER'), recipients=[email])
+    mail.send(msg)
+    return 'Email sent!'
+
+
+def send_reset_email(email, message):
+    msg = Message(subject='Password reset',
+                  body=message,
                   sender=os.environ.get('MAIL_USER'), recipients=[email])
     mail.send(msg)
     return 'Email sent!'
